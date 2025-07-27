@@ -1,33 +1,46 @@
-import pandas as pd
-from rapidfuzz import fuzz
+from transformers import pipeline
+import requests
+import os
 
-df = pd.read_csv("assets/nz.csv")
-cities = df['city']
+api_key = os.getenv("OPENCAGE_API_KEY")
+if not api_key:
+    raise ValueError("Please set the OPENCAGE_API_KEY environment variable")
 
-def get_matched_cities(terms, sentence, threshold=75):
-    sentence_lower = sentence.lower()
-    matches = []
-    
-    for term in terms:
-        term_lower = term.lower()
-        if ' ' not in term:
-            for word in sentence_lower.split():
-                if fuzz.ratio(term_lower, word) >= threshold:
-                    matches.append(term)
-                    break
-        else:
-            term_words = term_lower.split()
-            window_size = len(term_words)
-            words = sentence_lower.split()
-            
-            for i in range(len(words) - window_size + 1):
-                window = ' '.join(words[i:i + window_size])
-                if fuzz.ratio(term_lower, window) >= threshold:
-                    matches.append(term)
-                    break
-    return matches
+ner_pipeline = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
 
-def get_cords(query):
-    matched_cities = get_matched_cities(cities, query)
-    with_cords = df[df['city'].isin(matched_cities)]
-    return  df[df["city"] == "auckland"] if with_cords.empty else with_cords
+def extract_locations(query):
+    entities = ner_pipeline(query)
+    locations = [ent['word'] for ent in entities if ent['entity_group'] in ['LOC', 'ORG', 'PER', 'MISC']]
+    return list(set(locations)) 
+
+def geocode_location(location):
+    url = "https://api.opencagedata.com/geocode/v1/json"
+    params = {
+        "q": location,
+        "key": api_key,
+        "countrycode": "nz",
+        "limit": 1,
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    if data["results"]:
+        result = data["results"][0]
+        return {
+            "input": location,
+            "resolved": result["formatted"],
+            "lat": result["geometry"]["lat"],
+            "lng": result["geometry"]["lng"]
+        }
+    return {"input": location, "error": "Not found"}
+
+def process_query(query):
+    locations = extract_locations(query)
+    print(f"📍 Found locations: {locations}")
+    results = [geocode_location(loc) for loc in locations]
+    return results
+
+query = "How do I get from Symnds St to Queen Street in Auckland?"
+output = process_query(query)
+
+for loc in output:
+    print(loc)
