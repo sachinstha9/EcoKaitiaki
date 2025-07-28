@@ -1,7 +1,11 @@
 import requests
 import os
 
-def get_weather(lat, lon, api_key):
+api_key = os.getenv("WEATHER_API_KEY")
+if not api_key:
+    raise ValueError("Please set the WEATHER_API_KEY environment variable")
+
+def get_weather(lat, lon):
     location_query = f"{lat},{lon}"
     url = f"http://api.weatherapi.com/v1/forecast.json?key={api_key}&q={location_query}&days=3"
     response = requests.get(url)
@@ -47,18 +51,11 @@ def get_weather(lat, lon, api_key):
         "weather_condition": label
     }
 
-    print(f"3-Day Average Precipitation: {result['average_precip_mm']} mm")
-    print(f"3-Day Average Humidity: {result['average_humidity_percent']} %")
-    print(f"Weather Condition: {result['weather_condition']}")
-
     return result
 
-# Example usage
-if __name__ == "__main__":
-    api_key = os.getenv("WEATHER_API_KEY")
-    if not api_key:
-        raise ValueError("Please set the WEATHER_API_KEY environment variable")
-    latitude = -36.853    
-    longitude = 174.769
+# if __name__ == "__main__":
+#     
+#     latitude = -36.853    
+#     longitude = 174.769
 
-    weather_data = get_weather(latitude, longitude, api_key)
+#     weather_data = get_weather(latitude, longitude, api_key)

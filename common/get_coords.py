@@ -9,8 +9,9 @@ if not api_key:
 ner_pipeline = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
 
 def extract_locations(query):
+    query = query.title()
     entities = ner_pipeline(query)
-    locations = [ent['word'] for ent in entities if ent['entity_group'] in ['LOC', 'ORG', 'PER', 'MISC']]
+    locations = [ent['word'] for ent in entities if ent['entity_group'] in ['LOC', 'ORG']]
     return list(set(locations)) 
 
 def geocode_location(location):
@@ -33,14 +34,7 @@ def geocode_location(location):
         }
     return {"input": location, "error": "Not found"}
 
-def process_query(query):
+def get_coords(query):
     locations = extract_locations(query)
-    print(f"📍 Found locations: {locations}")
     results = [geocode_location(loc) for loc in locations]
     return results
-
-query = "How do I get from Symnds St to Queen Street in Auckland?"
-output = process_query(query)
-
-for loc in output:
-    print(loc)

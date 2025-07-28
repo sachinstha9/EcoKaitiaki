@@ -1,23 +1,25 @@
-import requests
-from transformers import pipeline
+from common.get_coords import get_coords
+from common.get_weather import get_weather
+from common.get_soil_type import get_soil_type
 
-from common.get_cords import get_cords
+query = "Where is hamilton and auckland?"
 
-query = "What fruit trees can I plant in a sunny backyard with clay soil near Auckland?"
-cords = get_cords(query)
+coords = get_coords(query)
 
-auck_lat = cords[cords["city"] == "auckland"]["lat"]
-auck_lng = cords[cords["city"] == "auckland"]["lng"]
+data = {}
 
-def get_soil(lat, lon):
-    url = f"https://rest.soilgrids.org/query?lon={lon}&lat={lat}&attributes=phh2o,clay"
-    return requests.get(url).json().get("properties", {})
-print(get_soil(auck_lat, auck_lng))
+for coord in coords:
+    weather_data = get_weather(coord["lat"], coord["lng"])
+    soil_data = get_soil_type(coord["lat"], coord["lng"])
 
+    data[coord["input"]] = {
+        "place": coord["resolved"],
+        "lat": coord["lat"],
+        "lng": coord["lng"],
+        "average_precip_mm": weather_data["average_precip_mm"],
+        "average_humidity_percent": weather_data["average_humidity_percent"],
+        "weather_condition": weather_data["weather_condition"],
+        "soil_type": soil_data
+    }
 
-# candidate_labels = ["soil", "weather"]
-
-
-# query_classification_pipe = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
-# result = query_classification_pipe(query, candidate_labels=candidate_labels)
-
+print(data)
