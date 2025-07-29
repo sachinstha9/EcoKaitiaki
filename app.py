@@ -7,7 +7,6 @@ query = "Where is hamilton and auckland?"
 coords = get_coords(query)
 
 data = {}
-
 for coord in coords:
     weather_data = get_weather(coord["lat"], coord["lng"])
     soil_data = get_soil_type(coord["lat"], coord["lng"])
