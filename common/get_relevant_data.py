@@ -1,4 +1,4 @@
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 import faiss
 import numpy as np
 import json
@@ -6,47 +6,87 @@ import json
 with open("assets/data.json", encoding='utf-8') as f:
     plants = json.load(f)
 
+field_descriptions = {
+    # "common name": "Name of the plant in everyday language",
+    # "scientific name": "The scientific Latin name of the plant",
+    # "description": "A short summary of the plant's key features",
+    # "tags": "Keywords that describe the plant",
+    "plant category": "General category like tree, shrub, groundcover, etc.",
+    "plant type": "Is it perennial, native, or exotic",
+    "mature height": "Maximum height the plant reaches when fully grown",
+    "mature width": "Maximum width the plant spreads to",
+    "growth rate": "How fast the plant grows",
+    "soil type": "The kinds of soil suitable for this plant",
+    "soil drainage": "How well the soil needs to drain for the plant",
+    "soil ph": "The ideal pH levels of the soil for the plant",
+    "location suitability": "What types of locations the plant grows well in",
+    "climate zone": "Best suited climate zones (temperate, tropical, etc.)",
+    "temperature range": "Range of temperatures the plant tolerates",
+    "rainfall requirements": "How much rainfall the plant needs",
+    "sun requirements": "Sunlight needs — full sun, partial shade, etc.",
+    "salt tolerance": "How much salt exposure the plant can handle",
+    "drought tolerance": "How well the plant handles drought",
+    "frost tolerance": "How well the plant tolerates frost",
+    "wind tolerance": "The level of wind the plant can endure",
+    "flowering season": "The months when the plant produces flowers",
+    "flower color": "Color of the plant's flowers",
+    "maintenance level": "How easy or difficult the plant is to maintain",
+    "wildlife value": "How the plant supports birds, insects, etc.",
+    "uses": "Purposes such as erosion control, shade, decoration",
+    "planting considerations": "Important things to know before planting",
+    "companion plants": "Plants that grow well together with this one",
+    "potential issues": "Possible downsides like toxicity or fragility",
+    "places found": "Regions where this plant naturally grows",
+    "best grown locations": "Cities or regions where this plant thrives best",
+    "growing months": "The best months to grow or plant this species",
+    "all": "all detailed informations about plants"
+}
 
-def get_relevant_data(query, k):
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-    texts = [
-        f"{plant.get('common_name', 'Unknown plant')} ({plant.get('scientific_name', 'No scientific name')}) is a "
-        f"{plant.get('growth_rate', 'unknown').lower()}-growing plant typically grown as "
-        f"{', '.join(plant.get('plant_type', ['unknown'])).lower()} in the "
-        f"{plant.get('plant_category', 'unknown').lower()} category. It grows to about "
-        f"{plant.get('mature_height', 'unknown height')} tall and {plant.get('mature_width', 'unknown width')} wide. "
-        f"It prefers {', '.join(plant.get('soil_drainage', ['unknown drainage']))} "
-        f"{', '.join(plant.get('soil_type', ['unknown soil type'])).lower()} with a "
-        f"{', '.join(plant.get('soil_ph', ['unknown pH'])).lower()} pH. Suitable for "
-        f"{', '.join(plant.get('location_suitability', ['unknown locations'])).lower()} in "
-        f"{', '.join(plant.get('climate_zone', ['unknown climate'])).lower()} climates. It thrives in "
-        f"{plant.get('temperature_range', 'unknown temperature range')} with "
-        f"{plant.get('rainfall_requirements', 'unknown rainfall').lower()} rainfall, and needs "
-        f"{plant.get('sun_requirements', 'unknown sun requirements').lower()}. Salt tolerance is "
-        f"{plant.get('salt_tolerance', 'unknown').lower()}, drought tolerance "
-        f"{plant.get('drought_tolerance', 'unknown').lower()}, frost tolerance "
-        f"{plant.get('frost_tolerance', 'unknown').lower()}, and wind tolerance "
-        f"{plant.get('wind_tolerance', 'unknown').lower()}. Maintenance is "
-        f"{plant.get('maintenance_level', 'unknown').lower()}. It can be used for "
-        f"{', '.join(plant.get('uses', ['various uses'])).lower()}. Tips: "
-        f"{plant.get('planting_considerations', 'No specific considerations.')}. Companion plants include "
-        f"{', '.join(plant.get('companion_plants', ['none']))}. Possible issues: "
-        f"{', '.join(plant.get('potential_issues', ['none']))}. Found in "
-        f"{', '.join(plant.get('places_found', ['various locations']))}, best grown in "
-        f"{', '.join(plant.get('best_grown_locations', ['various locations']))}. Growing months: "
-        f"{', '.join(plant.get('growing_months', ['unknown']))}. Tags: "
-        f"{', '.join(plant.get('tags', ['none']))}."
-        for plant in plants
-    ]
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
-    vectors = model.encode(texts)
-    index = faiss.IndexFlatL2(len(vectors[0]))
+field_keys = list(field_descriptions.keys())
+field_texts = list(field_descriptions.values())
+field_embeddings = model.encode(field_texts, convert_to_tensor=True)
+
+
+def get_relevant_fields(query, similarity_threshold = 0.6):
+    query_embedding = model.encode(query, convert_to_tensor=True)
+    similarities = util.pytorch_cos_sim(query_embedding, field_embeddings)[0]
+    relevant_indices = [i for i, score in enumerate(similarities) if score >= similarity_threshold]
+    sorted_indices = sorted(relevant_indices, key=lambda i: similarities[i], reverse=True)
+
+    ftrs = [field_keys[i] for i in sorted_indices]
+
+    if "all" in ftrs:
+        ftrs = field_keys
+        ftrs.remove("all")
+
+    return ["common name", "scientific name", "description", "tags"] + ftrs
+
+def get_individual_text(features, data):
+    text = ""
+    for ftr in features:
+        d = str(data.get(ftr, 'unknown')).replace("[", "").replace("]", "")
+        if d != 'unknown': text += f"{ftr} is {d} . "
+    return text
+
+def get_relevant_data(query, max_k=10, score_threshold=0.45):  # cosine similarity threshold
+    query = query.lower()
+    features = get_relevant_fields(query)
+    texts = [get_individual_text(features, plant) for plant in plants]
+
+    vectors = model.encode(texts, normalize_embeddings=True)
+    index = faiss.IndexFlatIP(len(vectors[0]))  # inner product = cosine sim if normalized
     index.add(np.array(vectors))
 
-    query_vector = model.encode([query])
+    query_vector = model.encode([query], normalize_embeddings=True)
+    D, I = index.search(np.array(query_vector), k=max_k)
 
-    D,I = index.search(np.array(query_vector), k = k)
+    results = [texts[i] for i, score in zip(I[0], D[0]) if score > score_threshold]
 
-    results = [plants[i] for i in I[0]]
+    if not results:
+        results = [texts[i] for i in I[0][:3]]
 
-    return results
+    return len(results), features, I, D
+
+print(get_relevant_data("give me 3 plants that grow in yellow soil?"))
