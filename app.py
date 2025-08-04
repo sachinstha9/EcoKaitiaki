@@ -37,9 +37,9 @@ def build_prompt(query, plant_results):
 def rag_plant_advisor(query):
     plants_found = get_relevant_data(query)
     prompt = build_prompt(query, plants_found)
-    # response = generator(prompt)[0]["generated_text"]
-    # answer = response[len(prompt):].strip()
-    return prompt
+    response = generator(prompt)[0]["generated_text"]
+    answer = response[len(prompt):].strip()
+    return answer
 
 output = rag_plant_advisor("give me plants that grows in rainy seasons.")
 print(output)

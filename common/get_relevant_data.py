@@ -70,13 +70,13 @@ def get_individual_text(features, data):
         if d != 'unknown': text += f"{ftr} is {d} . "
     return text
 
-def get_relevant_data(query, max_k=10, score_threshold=0.45):  # cosine similarity threshold
+def get_relevant_data(query, max_k=3, score_threshold=0.45):
     query = query.lower()
     features = get_relevant_fields(query)
     texts = [get_individual_text(features, plant) for plant in plants]
 
     vectors = model.encode(texts, normalize_embeddings=True)
-    index = faiss.IndexFlatIP(len(vectors[0]))  # inner product = cosine sim if normalized
+    index = faiss.IndexFlatIP(len(vectors[0])) 
     index.add(np.array(vectors))
 
     query_vector = model.encode([query], normalize_embeddings=True)
@@ -87,6 +87,4 @@ def get_relevant_data(query, max_k=10, score_threshold=0.45):  # cosine similari
     if not results:
         results = [texts[i] for i in I[0][:3]]
 
-    return len(results), features, I, D
-
-print(get_relevant_data("give me 3 plants that grow in yellow soil?"))
+    return results
