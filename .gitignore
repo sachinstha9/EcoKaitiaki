@@ -1,0 +1,5 @@
+env/
+model/*
+.gitignore
+tempCodeRunnerFile.py
+__pycache__/
