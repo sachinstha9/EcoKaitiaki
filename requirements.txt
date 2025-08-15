@@ -8,4 +8,3 @@ transformers
 faiss-cpu
 tensorflow
 transformers
-sentence_transfomers
